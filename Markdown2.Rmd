@@ -36,10 +36,10 @@ if(!require(janitor)){
   library(janitor)
 }
 
-if(!require(openxlsx)){
-  install.packages("openxlsx")
-  library(openxlsx)
-}
+#if(!require(rapportools)){
+#  install.packages("rapportools")
+#  library(rapportools)
+#}
 
 
 
@@ -1710,6 +1710,117 @@ setnames(denominador, "value" , 'den')
 ```
     
 
+
+### 2.6 número y % de personas que que tuvieron  ITS durante el proceso
+
+```{r  echo=FALSE,warning = FALSE}
+
+
+numerador0 <- personasN%>%filter( Variable == "Prueba_rapida_Sifilis" & !is.na(Valor))%>%
+                          mutate(Valorn = if_else((Valor == "Reactiva") |(Valor == "Si")  ,1,0))%>%
+                          select(Doc,Formulario,Valorn)%>%
+                          as.data.table() %>% 
+                          dcast(`Doc` ~ Formulario, value.var = "Valorn",fun.aggregate = sum)%>%
+                          filter(!(`Formulario inicial` > 0))%>%
+                          select(-Doc)%>%
+                          mutate (alguna = rowSums(across(where(is.numeric))))%>%
+                          select(alguna)
+
+
+max1 <- function(x) {
+  if_else(x >= 1, 1,0)
+}
+
+numerador0 <- numerador0%>% mutate(across(everything(), ~ max1(.x)))%>%
+                          summarise(across(everything(), list(Suma=sum), na.rm = TRUE))%>%
+                          as.data.table() %>% 
+                          melt()
+                         
+```
+
+```{r  echo=FALSE,warning = FALSE}
+
+numerador <- personasN%>%filter(!(Formulario == "Formulario inicial" ) & 
+                                (Variable == "sintomas_clamidia" |
+                                    Variable == "sintomas_gonorrea"|
+                                    Variable == "Prueba_rapida_Sifilis" |
+                                    Variable == "Prueba_rapida_Hepatitis_B"|
+                                    Variable == "Prueba_rapida_Hepatitis_C" )&
+                                    !(is.na(Valor)))%>%
+                          mutate(Valorn = if_else((Valor == "Reactiva") |(Valor == "Si")  ,1,0))%>%
+                          select(Doc,Variable,Valorn)%>%
+                          as.data.table() %>% 
+                          dcast(`Doc` ~ Variable, value.var = "Valorn",fun.aggregate = sum)
+
+
+
+
+
+numeradorinicial <- personasN%>%filter((Formulario == "Formulario inicial" ) & 
+                                (Variable == "sintomas_clamidia" |
+                                    Variable == "sintomas_gonorrea"|
+                                    Variable == "Prueba_rapida_Sifilis" |
+                                    Variable == "Prueba_rapida_Hepatitis_B"|
+                                    Variable == "Prueba_rapida_Hepatitis_C" )&
+                                    !(is.na(Valor)))%>%
+                          mutate(Valorn = if_else((Valor == "Reactiva") |(Valor == "Si")  ,1,0))%>%
+                          select(Doc,Variable,Valorn)%>%
+                          as.data.table() %>% 
+                          dcast(`Doc` ~ Variable, value.var = "Valorn",fun.aggregate = sum)
+
+
+numerador1 <- merge(x=numerador, y = numeradorinicial, all.x = TRUE, by.x = "Doc", by.y = "Doc")
+
+numerador1 <- numerador1 %>% mutate(`Prueba_rapida_Sifilis`=`Prueba_rapida_Sifilis.x`&(!`Prueba_rapida_Sifilis.y`))%>%
+                             mutate(`Prueba_rapida_Hepatitis_B`=`Prueba_rapida_Hepatitis_B.x`&(!`Prueba_rapida_Hepatitis_B.y`))%>%
+                             mutate(`Prueba_rapida_Hepatitis_C`=`Prueba_rapida_Hepatitis_C.x`&(!`Prueba_rapida_Hepatitis_C.y`))%>%
+                             mutate(`sintomas_clamidia`=`sintomas_clamidia.x`&(!`sintomas_clamidia.y`))%>%
+                             mutate(`sintomas_gonorrea`=`sintomas_gonorrea.x`&(!`sintomas_gonorrea.y`))%>%
+                             select(1,12:16)%>%
+                             select(-Doc)%>%
+                             mutate (alguna = sintomas_clamidia | sintomas_gonorrea | Prueba_rapida_Sifilis|Prueba_rapida_Hepatitis_B|Prueba_rapida_Hepatitis_C)
+  
+numerador2 <- numerador1%>% summarise(across(everything(), list(Suma=sum), na.rm = TRUE))%>%
+                          as.data.table()
+
+
+numerador2$id <- c("its")
+numerador2<- numerador2%>%melt()%>%
+                          select(-id)
+
+```
+```{r  echo=FALSE,warning = FALSE}
+     
+
+      result <- numerador2 %>%mutate(`resultado` =100*value/count(personas)[[1]])
+      
+      result$variable = c("Prueba de Sífilis","Prueba Hepatitis B","Prueba Hepatitis C", "Síntomas de Clamidia","Síntomas de Gonorrea", "Alguna ITS" )
+
+      header <- data.frame(             #define tabla para remplazo de cabeceras        
+      col_keys = c("variable", "value", "resultado"),
+      line2 = c("ITS", rep("Frecuencia",1), rep("%",1)))    
+     
+      ft <- flextable(result, col_keys = header$col_keys) #crea tabla 
+      ft <- set_formatter( x = ft,`resultado` = function(x) ifelse(is.na(x),"_",sprintf("%.02f%%",x))) # da formato %  
+      
+      
+      #ft <- autofit(ft)                                                                 #ajusta el ancho de la tabla
+      ft <- set_caption(ft, caption = "Número  y % de personas que presentaron ITSs durante el piloto")      #crea titulo de la tabla
+      ft <- set_header_df(ft, mapping = header, key = "col_keys" )                     #mapea las cabeceras definitivas
+      ft <- merge_v(ft,part = "header", j = 1)
+      ft <- theme_box(ft)                                                                 #aplica tema a tabla                                   
+      ft <- align(ft,align = "center", part = "header")                                    #alinea cabeceras al centro
+      ft <- bold(ft,bold=TRUE,part = "header")                                             #cabeceras en negrilla
+      ft <-set_table_properties(ft, layout = "autofit", width = .8)
+      ft
+```
+   
+
+
+**Se reportan como casos de reactividad a sífilis durante el seguimiento en el programa a aquellos individuos que no tenían una prueba positiva a su ingreso, y posteriormente obtuvieron una reactividad en alguna de las citas de control.*
+
+
+   
 ## 3 toxicity prevalence among people who have been prescribed PrEP   
     
 ### 3.1 toxicity prevalence among people who have been prescribed PrEP    
@@ -1906,7 +2017,7 @@ numerador <- numerador%>%group_by(`Formulario`=Formulario ) %>%
    
 ### 5.1 Adherencia al medicamento    
    
-### 5.1.1 Número y % de personas que reportaron adherencia 100% (de acuerdo a definición del protocolo)
+#### 5.1.1 Número y % de personas que reportaron adherencia 100% (de acuerdo a definición del protocolo)
    
 **Numerador:** Numero y % de personas que reportaron adherencia 100% (de acuerdo a definición del protocolo)
 **Denominador:** Número de personas que Asiteron a la cita de control
@@ -1984,7 +2095,7 @@ denominador <- personasN%>%filter(`Variable` == "Medico")%>%
 ```
       
            
-### 5.1.2 Numero y % de personas que fueron clasificadas como no adherentes (de acuerdo con definición del protocolo) agrupadas por causas de perdida de adherencia y en total
+#### 5.1.2 Numero y % de personas que fueron clasificadas como no adherentes (de acuerdo con definición del protocolo) agrupadas por causas de perdida de adherencia y en total
    
 **Numerador:** Número y % de personas que fueron clasificadas como no adherentes agrupadas por causas de perdida de adherencial y Atención
   
