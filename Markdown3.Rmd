@@ -2505,7 +2505,7 @@ numerador <- personasN%>%filter(`Variable` == "antecedente_vacuna_hepatitis_b" )
     
 ```{r  echo=FALSE,warning = FALSE}
 numerador <- personas%>%select(`Brazo 1`,`estado final vacunación Hep B form 5` ) %>%
-                        setDT()%>% 
+                        as.data.table()%>% 
                         dcast(`estado final vacunación Hep B form 5` ~ `Brazo 1`, fun.aggregate = length)%>%
                         mutate(Todos = PARTICULAR + SUBSIDIADO)%>%
                         slice(6,1,2) %>%
