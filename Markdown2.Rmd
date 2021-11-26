@@ -1053,6 +1053,84 @@ setnames(denominador, "value" , 'den')
       ft
 ```
    
+   ### 2.1.B early continuation on PrEP   
+   
+**Numerador:** Número de personas que continuaron PrEP por 3 meses consecutivos después de haber inicidado PrEP en los últimos 12 meses  (80 a 100 dias)
+  
+**Denominador:** Número de personas que iniciaron PrEP oral en los últimos 12 meses
+ 
+```{r  echo=FALSE,warning = FALSE}
+    
+numerador <- personas%>%filter(!is.na(`Formulario 3`))%>%
+                             mutate(`dias` = as.integer(`Fec. Formulario 3`-`Fec. Formulario 1`))%>%
+                             filter(dias >= 80)%>%
+                             filter(dias <= 100)%>%
+                             group_by(`Población`=Poblacion,Rango=cut(Edad, breaks= c(17,19,24,49,120)) ) %>% 
+                             summarise(num= n(), .groups = "keep") %>%
+                             arrange(as.numeric(`Población`))%>%
+                             as.data.table()%>%
+                             dcast(Rango ~ `Población`, fun.aggregate = sum , value.var="num" )%>%
+                             adorn_totals("row")%>%
+                             mutate(`Todos` = `HSH`+`Mujer trans` )%>%
+                             melt( id="Rango" )
+
+setnames(numerador, "variable" , 'Población')
+setnames(numerador, "value" , 'num')
+```
+
+
+```{r  echo=FALSE,warning = FALSE}
+denominador <- personas%>%group_by(`Población`=Poblacion,Rango=cut(Edad, breaks= c(17,19,24,49,120)) ) %>% 
+                             summarise(den= n(), .groups = "keep") %>%
+                             arrange(as.numeric(`Población`))%>%
+                             as.data.table()%>%
+                             dcast(Rango ~ `Población`, fun.aggregate = sum , value.var="den" )%>%
+                             adorn_totals("row")%>%
+                             mutate(`Todos` = `HSH`+`Mujer trans` )%>%
+                             melt( id="Rango" )
+
+setnames(denominador, "variable" , 'Población')
+setnames(denominador, "value" , 'den')
+```
+    
+        
+
+```{r  echo=FALSE,warning = FALSE}
+      result <-  merge(x= numerador, y= denominador,  all.y = TRUE,  #une numerador y denominado
+                           by.x = c("Rango","Población"), 
+                           by.y = c("Rango","Población"))
+      
+      result <- result %>% mutate(resultado = 100* num/den) #calcula resultado
+      result <- as.data.table(result)         #conviert a data.table para poder hacer melt
+      result <- melt(result, id=c("Rango","Población") ) #convierte en tabla vertica
+      result <- dcast(result, Rango ~ `Población`+variable,  #convierte en tabla horizontal
+                          fun.aggregate = sum)
+      result <- result%>%mutate(Rango = rango_edad[Rango]) # remplaza nombres de los rangos
+      
+      header <- data.frame(             #define tabla para remplazo de cabeceras        
+      col_keys = c("Rango", "HSH_num", "HSH_den", "HSH_resultado", 
+                   "Mujer trans_num", "Mujer trans_den", "Mujer trans_resultado",
+                   "Todos_num", "Todos_den", "Todos_resultado"),
+      line2 = c("Rango Edad", rep("HSH", 3), rep("Mujer Trans", 3), rep("Todos", 3)),
+      line3 = c("Rango Edad", rep(c("num", "den", "Resultado"), 3)))
+   
+      ft <- flextable(result, col_keys = header$col_keys) #crea tabla 
+      ft <- set_formatter( x = ft,HSH_resultado = function(x) ifelse(is.na(x),"_",sprintf("%.02f%%",x))) # da formato %  
+      ft <- set_formatter( x = ft,`Mujer trans_resultado` = function(x) ifelse(is.na(x),"_",sprintf("%.02f%%",x)))# da formato %   resultados
+      ft <- set_formatter( x = ft,`Todos_resultado` = function(x) ifelse(is.na(x),"_",sprintf("%.02f%%",x)))# da formato %  a columan de resultados
+      
+      #ft <- autofit(ft)                                                                 #ajusta el ancho de la tabla
+      ft <- set_caption(ft, caption = "Early continuation on PrEP Población y rango de edad")      #crea titulo de la tabla
+      ft <- set_header_df(ft, mapping = header, key = "col_keys" )                     #mapea las cabeceras definitivas
+      ft <- merge_v(ft,part = "header", j = 1)                                             #combina celdas de cabecera                            
+      ft <- merge_h(ft,part = "header", i = 1)                                             #combina celdas de cabecera  
+      ft <- theme_box(ft)                                                                 #aplica tema a tabla                                   
+      ft <- align(ft,align = "center", part = "header")                                    #alinea cabeceras al centro
+      ft <- bold(ft,bold=TRUE,part = "header")                                             #cabeceras en negrilla
+      ft <-set_table_properties(ft, layout = "autofit", width = .8)
+      ft
+```
+   
 ### 2.2 Numero y % de personas que asistieron a su segunda consulta de control a los 2 meses siguientes
 
 es el mismo 2.1
@@ -2408,7 +2486,7 @@ numerador <- personas%>%select(`Brazo 1`,`estado final vacunación Hep B form 5`
                         as.data.table() %>% 
                         dcast(`estado final vacunación Hep B form 5` ~ `Brazo 1`, fun.aggregate = length)%>%
                         mutate(Todos = PARTICULAR + SUBSIDIADO)%>%
-                        slice(6,1,2) %>%
+                        slice(6,1,2,3,5,4) %>%
                         adorn_totals("row")
 ```
 ```{r  echo=FALSE,warning = FALSE}
